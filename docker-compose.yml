@@ -1,0 +1,31 @@
+services:
+  plc-monitor:
+    build: .
+    image: plc-monitor:latest
+    container_name: plc-monitor
+    restart: unless-stopped
+
+    # Host networking is required, not a convenience. plctool speaks raw
+    # layer-2 HomePlug frames (ethertype 0x88E1); Docker's default bridge
+    # NATs at layer 3 and drops them. The container must sit directly on
+    # the NAS interface that shares a VLAN with the powerline adapter.
+    network_mode: host
+
+    # Raw AF_PACKET socket, plus the interface multicast join. Nothing else.
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
+
+    env_file:
+      - ./plc-monitor.env
+
+    # History lives here so it survives rebuilds. The rest of the filesystem
+    # stays read-only.
+    volumes:
+      - ./data:/data
+
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp

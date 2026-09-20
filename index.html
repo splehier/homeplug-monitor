@@ -1,0 +1,673 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>plc</title>
+<style>
+/* Palette lifted from btop++'s built-in Default theme (src/btop_theme.cpp).
+   Panels are told apart by the colour of their frame, not by headings. */
+:root {
+  --bg:        #000000;
+  --fg:        #cccccc;
+  --title:     #eeeeee;
+  --dim:       #606060;   /* graph_text */
+  --inactive:  #404040;
+  --div:       #303030;
+  --meter-bg:  #404040;
+  --hi:        #b54040;
+
+  --line-link:  #556d59;  /* cpu_box    */
+  --line-rate:  #5c588d;  /* net_box    */
+  --line-adapt: #6c6c4b;  /* mem_box    */
+  --line-event: #805252;  /* proc_box   */
+
+  --good:    #77ca9b;
+  --warn:    #cbc06c;
+  --amber:   #ffb814;
+  --bad:     #dc4c4c;
+  --unknown: #74e6fc;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+               "DejaVu Sans Mono", monospace;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+main { max-width: 1100px; margin: 0 auto; padding: 10px 16px 28px; }
+
+/* ---- header, in the manner of btop's top line ---- */
+.top {
+  display: flex; align-items: baseline; gap: 10px;
+  color: var(--dim); padding: 4px 2px 10px; flex-wrap: wrap;
+}
+.top .name { color: var(--title); font-weight: 700; }
+.top .name span { color: var(--hi); }
+.top .sep { color: var(--div); }
+.top .clock { margin-left: auto; color: var(--fg); }
+
+/* ---- the box ----
+   btop draws a rounded frame and notches the title into the top border
+   using inverted corner glyphs (┐title┌), so the label reads as a tab cut
+   out of the line rather than text sitting on top of it. */
+.panel {
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 16px 14px 12px;
+  margin: 0 0 12px;
+}
+.panel.link     { --line: var(--line-link); }
+.panel.rate     { --line: var(--line-rate); }
+.panel.adapters { --line: var(--line-adapt); }
+.panel.events   { --line: var(--line-event); }
+
+.tag {
+  position: absolute; top: -0.78em; left: 10px;
+  background: var(--bg); line-height: 1; white-space: nowrap;
+  font-weight: 700; letter-spacing: .02em;
+}
+.tag.right { left: auto; right: 10px; font-weight: 400; }
+.tag i  { font-style: normal; color: var(--line); }
+.tag b  { color: var(--title); padding: 0 3px; }
+.tag em { font-style: normal; color: var(--dim); padding: 0 3px; }
+
+/* range buttons live in the border, like btop's box shortcuts */
+.tag button {
+  background: none; border: 0; padding: 0 4px; cursor: pointer;
+  font: inherit; color: var(--inactive);
+}
+.tag button:hover { color: var(--fg); }
+.tag button[aria-pressed="true"] { color: var(--title); font-weight: 700; }
+.tag button u { color: var(--hi); text-decoration: none; }
+
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 760px) { .grid2 { grid-template-columns: 1fr; } }
+
+/* ---- link panel ---- */
+.verdict { font-size: 22px; font-weight: 700; letter-spacing: .06em; }
+.verdict.is-linked   { color: var(--good); }
+.verdict.is-marginal { color: var(--warn); }
+.verdict.is-degraded { color: var(--amber); }
+.verdict.is-down     { color: var(--bad); }
+.verdict.is-unknown  { color: var(--unknown); }
+
+.rates { display: flex; gap: 18px; align-items: baseline; }
+.rates .n { font-size: 20px; font-weight: 700; color: var(--title); }
+.rates .u { color: var(--dim); font-size: 11px; }
+.arrow.up   { color: #dcafde; }   /* upload gradient end   */
+.arrow.down { color: #b0a9de; }   /* download gradient end */
+
+.meter { letter-spacing: -1px; word-break: break-all; margin: 8px 0 6px; }
+.meter span { }
+
+.facts { color: var(--dim); }
+.facts b { color: var(--fg); font-weight: 400; }
+.fault {
+  margin-top: 8px; padding: 6px 8px;
+  border-left: 2px solid var(--bad); color: var(--bad);
+}
+.stale { color: var(--amber); }
+
+/* ---- rate panel ---- */
+.graph { display: flex; gap: 8px; }
+.yaxis {
+  display: flex; flex-direction: column; justify-content: space-between;
+  color: var(--dim); font-size: 10px; text-align: right;
+  width: 34px; flex: none; padding: 1px 0;
+}
+.plot { position: relative; flex: 1; min-width: 0; }
+.plot svg { display: block; width: 100%; height: 84px; }
+.plot .mid { height: 1px; background: var(--div); }
+.plot .dir {
+  position: absolute; left: 4px; color: var(--dim); font-size: 10px;
+  pointer-events: none;
+}
+.plot .dir.up { top: 2px; }
+.plot .dir.down { bottom: 2px; }
+.xaxis {
+  display: flex; justify-content: space-between;
+  color: var(--dim); font-size: 10px; padding: 4px 0 0 42px;
+}
+.cursor {
+  position: absolute; top: 0; bottom: 0; width: 1px;
+  background: var(--inactive); pointer-events: none; display: none;
+}
+.tip {
+  position: absolute; z-index: 2; pointer-events: none; display: none;
+  background: #0a0a0a; border: 1px solid var(--div); padding: 4px 7px;
+  white-space: nowrap; font-size: 11px; color: var(--fg);
+}
+.tip u { color: var(--dim); text-decoration: none; }
+
+/* ---- tables ---- */
+table { border-collapse: collapse; width: 100%; }
+th, td { text-align: left; padding: 3px 10px 3px 0; white-space: nowrap; }
+thead th { color: var(--dim); font-weight: 400; border-bottom: 1px solid var(--div); }
+tbody td { color: var(--fg); }
+tbody tr + tr td { border-top: 1px solid #141414; }
+.scroll { overflow-x: auto; }
+.empty { color: var(--dim); }
+.tone-alternate { color: var(--amber); }
+.tone-primary   { color: var(--good); }
+
+.ev-down  { color: var(--bad); }
+.ev-blind { color: var(--unknown); }
+.dur { color: var(--title); }
+
+.stats { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 8px; }
+.stat .k { color: var(--dim); font-size: 10px; text-transform: uppercase; letter-spacing: .08em; }
+.stat .v { color: var(--title); font-size: 16px; font-weight: 700; }
+
+.offline { color: var(--bad); }
+</style>
+</head>
+<body>
+<main>
+  <div class="top">
+    <span class="name">plc<span>++</span></span>
+    <span class="sep">─</span>
+    <span id="top-iface">…</span>
+    <span class="sep">─</span>
+    <span id="top-up">…</span>
+    <span class="clock" id="clock">--:--:--</span>
+  </div>
+
+  <div class="panel link">
+    <span class="tag"><i>┐</i><b>link</b><i>┌</i></span>
+    <span class="tag right"><i>┐</i><em id="link-up24">·</em><i>┌</i></span>
+    <div class="grid2">
+      <div>
+        <div class="verdict is-unknown" id="verdict">CHECKING</div>
+        <div class="meter" id="health-meter"></div>
+        <div class="facts" id="facts">reading the adapter…</div>
+      </div>
+      <div>
+        <div class="rates">
+          <div>
+            <span class="arrow up">↑</span>
+            <span class="n" id="tx">–</span> <span class="u">Mbit/s tx</span>
+          </div>
+          <div>
+            <span class="arrow down">↓</span>
+            <span class="n" id="rx">–</span> <span class="u">Mbit/s rx</span>
+          </div>
+        </div>
+        <div class="meter" id="rate-meter"></div>
+        <div class="facts" id="rate-facts"></div>
+      </div>
+    </div>
+    <div class="fault" id="fault" hidden></div>
+  </div>
+
+  <div class="panel rate">
+    <span class="tag"><i>┐</i><b>rate</b><i>┌</i></span>
+    <span class="tag right" id="ranges">
+      <i>┐</i>
+      <button data-hours="1"><u>1</u>h</button>
+      <button data-hours="6" aria-pressed="true"><u>6</u>h</button>
+      <button data-hours="24"><u>2</u>4h</button>
+      <button data-hours="168"><u>7</u>d</button>
+      <i>┌</i>
+    </span>
+    <div class="graph">
+      <div class="yaxis" id="yaxis"><span>–</span><span>0</span><span>–</span></div>
+      <div class="plot" id="plot">
+        <div class="dir up">↑ tx</div>
+        <svg id="chart-up" viewBox="0 0 720 100" preserveAspectRatio="none"
+             role="img" aria-label="transmit rate history"></svg>
+        <div class="mid"></div>
+        <svg id="chart-down" viewBox="0 0 720 100" preserveAspectRatio="none"
+             role="img" aria-label="receive rate history"></svg>
+        <div class="dir down">↓ rx</div>
+        <div class="cursor" id="cursor"></div>
+        <div class="tip" id="tip"></div>
+      </div>
+    </div>
+    <div class="xaxis"><span id="x0">–</span><span id="xnote"></span><span id="x1">–</span></div>
+  </div>
+
+  <div class="grid2">
+    <div class="panel adapters">
+      <span class="tag"><i>┐</i><b>adapters</b><i>┌</i></span>
+      <span class="tag right"><i>┐</i><em id="adapt-count">·</em><i>┌</i></span>
+      <div class="scroll" id="stations"></div>
+    </div>
+
+    <div class="panel events">
+      <span class="tag"><i>┐</i><b>events</b><i>┌</i></span>
+      <span class="tag right"><i>┐</i><em id="ev-window">24h</em><i>┌</i></span>
+      <div class="stats" id="ev-stats"></div>
+      <div class="scroll" id="events"></div>
+    </div>
+  </div>
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  const el = (id) => document.getElementById(id);
+  const REFRESH_MIN_MS = 5000;
+
+  /* ---- btop gradients (src/btop_theme.cpp, Default_theme) ---------------
+     In btop a graph's colour is a function of the row's position on the
+     canvas, not of the value: a fixed vertical wash that the data rises
+     into. Reproduced here as an SVG linearGradient over the plot area. */
+  const GRAD = {
+    upload:   ["#620665", "#7d4180", "#dcafde"],
+    download: ["#291f75", "#4f43a3", "#b0a9de"],
+    // cpu gradient reversed: for load more is worse, for link rate more is
+    // better, so red belongs at the empty end of the meter.
+    health:   ["#dc4c4c", "#cbc06c", "#77ca9b"],
+    rate:     ["#384f21", "#b5e685", "#dcff85"]   // free_* — "more is better"
+  };
+
+  const hex = (c) => [parseInt(c.slice(1, 3), 16), parseInt(c.slice(3, 5), 16), parseInt(c.slice(5, 7), 16)];
+  const mix = (a, b, t) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
+  const rgb = (c) => `rgb(${c[0]},${c[1]},${c[2]})`;
+
+  function gradientAt(stops, t) {
+    t = Math.min(1, Math.max(0, t));
+    const [s, m, e] = stops.map(hex);
+    return rgb(t < 0.5 ? mix(s, m, t * 2) : mix(m, e, (t - 0.5) * 2));
+  }
+
+  /* btop's meter: a run of ■, each block coloured by its own position along
+     the gradient, the remainder left in meter_bg. */
+  function meter(node, pct, stops, blocks) {
+    const n = blocks || 34;
+    pct = Math.min(100, Math.max(0, pct || 0));
+    let html = "";
+    for (let i = 1; i <= n; i++) {
+      const y = (i * 100) / n;
+      const colour = pct >= y ? gradientAt(stops, (i - 1) / (n - 1)) : "var(--meter-bg)";
+      html += `<span style="color:${colour}">■</span>`;
+    }
+    node.innerHTML = html;
+  }
+
+  const fmtRate = (v) => (v === null || v === undefined ? "–" : Math.round(v).toLocaleString());
+
+  function fmtDur(secs) {
+    secs = Math.max(0, Math.round(secs));
+    if (secs < 60) return `${secs}s`;
+    if (secs < 3600) return `${Math.floor(secs / 60)}m ${secs % 60}s`;
+    if (secs < 86400) return `${Math.floor(secs / 3600)}h ${Math.floor((secs % 3600) / 60)}m`;
+    return `${Math.floor(secs / 86400)}d ${Math.floor((secs % 86400) / 3600)}h`;
+  }
+
+  function fmtAge(ts) {
+    if (!ts) return "never";
+    return fmtDur(Date.now() / 1000 - ts) + " ago";
+  }
+
+  const fmtClock = (ts) =>
+    new Date(ts * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const fmtStamp = (ts) =>
+    new Date(ts * 1000).toLocaleString([], {
+      month: "short", day: "numeric", hour: "2-digit", minute: "2-digit"
+    });
+
+  const VERDICTS = {
+    linked:   { text: "LINKED",   detail: (s) => `${s.station_count} partner adapter${s.station_count === 1 ? "" : "s"}, both directions above ${s.marginal_mbps} Mbit/s.` },
+    marginal: { text: "WEAK LINK", detail: (s) => `Partner present but the weaker direction is under ${s.marginal_mbps} Mbit/s. Electrical noise on the circuit is the usual cause.` },
+    degraded: { text: "DEGRADED", detail: (s) => `${s.station_count} of ${s.expected_stations} expected adapters are on the network.` },
+    down:     { text: "NO PARTNER", detail: () => "The local adapter has formed a network and nothing has joined it. The remote unit is unreachable, unpaired or off." },
+    unknown:  { text: "CANNOT READ ADAPTER", detail: () => "The monitor could not query the local adapter, so it knows nothing about the link itself." }
+  };
+
+  /* ---- status ---------------------------------------------------------- */
+
+  function render(s) {
+    const v = VERDICTS[s.health] || VERDICTS.unknown;
+    const verdict = el("verdict");
+    verdict.textContent = s.stale ? "NOT POLLING" : v.text;
+    verdict.className = "verdict is-" + (s.stale ? "unknown" : s.health);
+
+    const scale = s.scale_mbps || s.max_mbps || 1300;
+    const worst = [s.tx_mbps, s.rx_mbps].filter((x) => x !== null && x !== undefined);
+    const health = s.health === "linked" ? 100
+      : s.health === "marginal" || s.health === "degraded"
+        ? Math.max(12, Math.min(60, ((Math.min(...worst) || 0) / s.marginal_mbps) * 50))
+        : 0;
+    meter(el("health-meter"), health, GRAD.health);
+
+    el("tx").textContent = fmtRate(s.tx_mbps);
+    el("rx").textContent = fmtRate(s.rx_mbps);
+    meter(el("rate-meter"), ((Math.min(...worst) || 0) / scale) * 100, GRAD.rate);
+    el("rate-facts").innerHTML =
+      `scale <b>${scale}</b> Mbit/s · weak under <b>${s.marginal_mbps}</b>` +
+      (s.tonemap ? ` · tonemap <b class="tone-${s.tonemap}">${s.tonemap}</b>` : "");
+
+    el("facts").innerHTML = [
+      `mac <b>${s.local_mac || "?"}</b>`,
+      `role <b>${s.role || "?"}</b>`,
+      `snid <b>${s.snid || "?"}</b>`,
+      `fw <b>${s.firmware || "?"}</b>`,
+      `${s.health === "linked" ? "linked" : "last linked"} <b>${fmtAge(s.last_linked_at)}</b>`,
+      `unchanged <b>${fmtAge(s.changed_at)}</b>`
+    ].join(" · ");
+
+    const fault = el("fault");
+    if (s.error || s.stale) {
+      fault.hidden = false;
+      fault.textContent = s.stale
+        ? `No poll in ${fmtDur(Date.now() / 1000 - (s.polled_at || 0))} — the service is running but not reading the adapter.`
+        : s.error;
+    } else {
+      fault.hidden = true;
+    }
+
+    el("top-iface").textContent = s.iface;
+    el("top-up").textContent = "up " + fmtDur(Date.now() / 1000 - (s.started_at || 0));
+    el("adapt-count").textContent =
+      `${s.station_count} of ${s.expected_stations}`;
+
+    renderStations(s.stations || []);
+    return s;
+  }
+
+  function renderStations(stations) {
+    const host = el("stations");
+    if (!stations.length) {
+      host.innerHTML = `<p class="empty">None. Move the remote adapter to a socket in this
+        room and watch this panel — if it appears, the wiring between the two sockets is
+        the problem.</p>`;
+      return;
+    }
+    const rawKeys = [...new Set(stations.flatMap((s) => Object.keys(s.raw || {})))];
+    const head = ["mac", "tei", "tx", "rx", "tonemap", "behind it"].concat(
+      rawKeys.filter((k) => !["MAC", "TEI", "BDA"].includes(k)).map((k) => k.toLowerCase())
+    );
+    const rows = stations.map((s) => {
+      const tone = s.tx_map || s.rx_map || "";
+      const cells = [
+        s.mac || "–", s.tei || "–", fmtRate(s.tx), fmtRate(s.rx),
+        `<span class="tone-${tone}">${tone || "–"}</span>`, s.bda || "–"
+      ].concat(
+        rawKeys.filter((k) => !["MAC", "TEI", "BDA"].includes(k))
+               .map((k) => (s.raw || {})[k] ?? "–")
+      );
+      return "<tr>" + cells.map((c) => `<td>${c}</td>`).join("") + "</tr>";
+    });
+    host.innerHTML =
+      "<table><thead><tr>" + head.map((h) => `<th>${h}</th>`).join("") +
+      "</tr></thead><tbody>" + rows.join("") + "</tbody></table>";
+  }
+
+  /* ---- chart ----------------------------------------------------------- */
+
+  const W = 720, H = 100;
+  let hours = 6;
+  let points = [];
+  let top = 1;
+
+  const svgNS = "http://www.w3.org/2000/svg";
+  const mk = (name, attrs) => {
+    const n = document.createElementNS(svgNS, name);
+    for (const k in attrs) n.setAttribute(k, attrs[k]);
+    return n;
+  };
+
+  function niceCeiling(peak) {
+    const steps = [10, 25, 50, 100, 200, 300, 400, 600, 800, 1000, 1300];
+    return steps.find((s) => s >= peak * 1.1) || Math.ceil(peak * 1.1);
+  }
+
+  /* One half of the mirrored graph. `down` flips it so the lower plot hangs
+     from the mid line, which is how btop draws the net box. */
+  function drawHalf(svg, key, lo, hi, stops, down) {
+    svg.textContent = "";
+    if (points.length < 2) return;
+
+    const defs = mk("defs", {});
+    const id = "g-" + key;
+    const grad = mk("linearGradient", {
+      id, gradientUnits: "userSpaceOnUse",
+      x1: 0, x2: 0,
+      y1: down ? 0 : H,      // gradient start sits at the baseline…
+      y2: down ? H : 0       // …and runs toward the far edge
+    });
+    stops.forEach((c, i) => grad.append(mk("stop", { offset: i / (stops.length - 1), "stop-color": c })));
+    defs.append(grad);
+    svg.append(defs);
+
+    const t0 = points[0].t;
+    const t1 = points[points.length - 1].t || t0 + 1;
+    const x = (t) => ((t - t0) / Math.max(1, t1 - t0)) * W;
+    const y = (v) => {
+      const f = Math.min(v, top) / top;
+      return down ? f * H : H - f * H;
+    };
+    const base = down ? 0 : H;
+
+    // Failed reads as a faint column, so an outage is visible in the graph
+    // itself rather than only in the events panel.
+    points.forEach((p, i) => {
+      if (p.ok) return;
+      const x0 = x(p.t);
+      const x1v = i + 1 < points.length ? x(points[i + 1].t) : x0 + W / points.length;
+      svg.append(mk("rect", {
+        x: x0, y: 0, width: Math.max(1, x1v - x0), height: H,
+        fill: "#74e6fc", opacity: 0.10
+      }));
+    });
+    points.forEach((p, i) => {
+      if (!p.ok || p.linked) return;
+      const x0 = x(p.t);
+      const x1v = i + 1 < points.length ? x(points[i + 1].t) : x0 + W / points.length;
+      svg.append(mk("rect", {
+        x: x0, y: 0, width: Math.max(1, x1v - x0), height: H,
+        fill: "#dc4c4c", opacity: 0.16
+      }));
+    });
+
+    // min–max band, one polygon per unbroken run
+    let run = [];
+    const flush = () => {
+      if (run.length > 1) {
+        const up = run.map((p) => `${x(p.t).toFixed(1)},${y(p[hi]).toFixed(1)}`);
+        const dn = run.slice().reverse().map((p) => `${x(p.t).toFixed(1)},${y(p[lo]).toFixed(1)}`);
+        svg.append(mk("polygon", {
+          points: up.concat(dn).join(" "), fill: `url(#${id})`, opacity: 0.28
+        }));
+      }
+      run = [];
+    };
+    points.forEach((p) => (p[hi] === null || p[lo] === null ? flush() : run.push(p)));
+    flush();
+
+    // average, as a filled area under the line
+    let d = "", open = false;
+    points.forEach((p) => {
+      if (p[key] === null || !p.ok) {
+        if (open) d += `L${x(p.t).toFixed(1)},${base} Z `;
+        open = false;
+        return;
+      }
+      if (!open) d += `M${x(p.t).toFixed(1)},${base} `;
+      d += `L${x(p.t).toFixed(1)},${y(p[key]).toFixed(1)} `;
+      open = true;
+    });
+    if (open) d += `L${x(points[points.length - 1].t).toFixed(1)},${base} Z`;
+    if (d.trim()) svg.append(mk("path", { d: d.trim(), fill: `url(#${id})`, opacity: 0.85 }));
+
+    // the marginal threshold, so "weak" is legible on the graph
+    const marginal = window.__marginal || 0;
+    if (marginal > 0 && marginal < top) {
+      svg.append(mk("line", {
+        x1: 0, x2: W, y1: y(marginal), y2: y(marginal),
+        stroke: "#cbc06c", "stroke-width": 1, "stroke-dasharray": "4 4", opacity: 0.55
+      }));
+    }
+  }
+
+  function drawChart(data) {
+    points = data.points || [];
+    const note = el("xnote");
+    if (points.length < 2) {
+      note.textContent = window.__historyOk === false
+        ? "history disabled — PLC_DB_PATH is not writable"
+        : "collecting data";
+      el("chart-up").textContent = "";
+      el("chart-down").textContent = "";
+      el("x0").textContent = el("x1").textContent = "–";
+      return;
+    }
+    const peak = Math.max(1, ...points.flatMap((p) => [p.tx_hi || 0, p.rx_hi || 0]));
+    top = niceCeiling(peak);
+
+    drawHalf(el("chart-up"), "tx", "tx_lo", "tx_hi", GRAD.upload, false);
+    drawHalf(el("chart-down"), "rx", "rx_lo", "rx_hi", GRAD.download, true);
+
+    el("yaxis").innerHTML =
+      `<span>${top}</span><span>0</span><span>${top}</span>`;
+    el("x0").textContent = fmtClock(points[0].t);
+    el("x1").textContent = fmtClock(points[points.length - 1].t);
+    note.textContent =
+      `${points.length} buckets · ${Math.round(data.bucket_seconds / 60) || "<1"} min each`;
+  }
+
+  /* hover readout */
+  const plot = el("plot");
+  plot.addEventListener("mousemove", (ev) => {
+    if (points.length < 2) return;
+    const box = plot.getBoundingClientRect();
+    const f = (ev.clientX - box.left) / box.width;
+    const i = Math.min(points.length - 1, Math.max(0, Math.round(f * (points.length - 1))));
+    const p = points[i];
+    const cur = el("cursor"), tip = el("tip");
+    cur.style.display = "block";
+    cur.style.left = (f * box.width).toFixed(0) + "px";
+    tip.style.display = "block";
+    tip.innerHTML = !p.ok
+      ? `<u>${fmtClock(p.t)}</u> · adapter unreadable`
+      : `<u>${fmtClock(p.t)}</u> · ↑ ${fmtRate(p.tx)} <u>(${fmtRate(p.tx_lo)}–${fmtRate(p.tx_hi)})</u>` +
+        ` · ↓ ${fmtRate(p.rx)} <u>(${fmtRate(p.rx_lo)}–${fmtRate(p.rx_hi)})</u>` +
+        (p.linked ? "" : " · no partner");
+    const w = tip.offsetWidth;
+    tip.style.left = Math.max(0, Math.min(box.width - w, f * box.width - w / 2)).toFixed(0) + "px";
+    tip.style.top = "6px";
+  });
+  plot.addEventListener("mouseleave", () => {
+    el("cursor").style.display = "none";
+    el("tip").style.display = "none";
+  });
+
+  /* ---- events ---------------------------------------------------------- */
+
+  function renderEvents(d) {
+    const stats = el("ev-stats");
+    el("ev-window").textContent = d.hours >= 24 ? `${Math.round(d.hours / 24)}d` : `${d.hours}h`;
+
+    const uptime = d.uptime_pct === null || d.uptime_pct === undefined ? "–" : d.uptime_pct + "%";
+    const colour =
+      d.uptime_pct === null || d.uptime_pct === undefined ? "var(--dim)"
+        : d.uptime_pct >= 99.5 ? "var(--good)"
+        : d.uptime_pct >= 95 ? "var(--warn)" : "var(--bad)";
+    stats.innerHTML = `
+      <div class="stat"><div class="k">link uptime</div><div class="v" style="color:${colour}">${uptime}</div></div>
+      <div class="stat"><div class="k">outages</div><div class="v">${d.outages.filter((o) => o.kind === "down").length}</div></div>
+      <div class="stat"><div class="k">renegotiations</div><div class="v">${d.renegotiations}</div></div>
+      <div class="stat"><div class="k">down</div><div class="v">${fmtDur(d.down_seconds)}</div></div>`;
+
+    const host = el("events");
+    if (!d.outages.length) {
+      host.innerHTML = `<p class="empty">No drops, no renegotiations. ${
+        d.samples ? d.samples.toLocaleString() + " samples." : ""}</p>`;
+      return;
+    }
+    host.innerHTML =
+      "<table><thead><tr><th>when</th><th>what</th><th>for</th></tr></thead><tbody>" +
+      d.outages.map((o) => `<tr>
+          <td>${fmtStamp(o.start)}</td>
+          <td class="ev-${o.kind}">${o.kind === "down" ? "no partner" : "adapter unreadable"}${o.ongoing ? " (ongoing)" : ""}</td>
+          <td class="dur">${fmtDur(o.seconds)}</td>
+        </tr>`).join("") +
+      "</tbody></table>";
+  }
+
+  /* ---- loops ----------------------------------------------------------- */
+
+  let pollMs = REFRESH_MIN_MS;
+
+  async function loadStatus() {
+    try {
+      const res = await fetch("api/status", { cache: "no-store" });
+      if (!res.ok) throw new Error(res.statusText);
+      const s = await res.json();
+      window.__marginal = s.marginal_mbps;
+      window.__historyOk = s.history_ok !== false;
+      render(s);
+      // Match the service's cadence instead of hammering it six times a poll.
+      pollMs = Math.max(REFRESH_MIN_MS, (s.poll_interval || 60) * 1000 / 2);
+    } catch (err) {
+      el("verdict").textContent = "MONITOR UNREACHABLE";
+      el("verdict").className = "verdict is-down";
+      el("facts").innerHTML =
+        '<span class="offline">This page cannot reach the service on this host. Check that the plc-monitor container is running.</span>';
+    }
+  }
+
+  async function loadHistory() {
+    try {
+      const res = await fetch(`api/history?hours=${hours}&buckets=240`, { cache: "no-store" });
+      if (res.ok) drawChart(await res.json());
+    } catch (err) {
+      el("xnote").textContent = "history unavailable";
+    }
+  }
+
+  async function loadEvents() {
+    try {
+      const res = await fetch(`api/outages?hours=${Math.max(hours, 24)}&limit=40`, { cache: "no-store" });
+      if (res.ok) renderEvents(await res.json());
+    } catch (err) { /* panel keeps its last content */ }
+  }
+
+  el("ranges").addEventListener("click", (ev) => {
+    const btn = ev.target.closest("button");
+    if (!btn) return;
+    hours = Number(btn.dataset.hours);
+    [...ev.currentTarget.querySelectorAll("button")].forEach((b) =>
+      b.setAttribute("aria-pressed", String(b === btn)));
+    loadHistory();
+    loadEvents();
+  });
+
+  document.addEventListener("keydown", (ev) => {
+    const map = { "1": 1, "6": 6, "2": 24, "7": 168 };
+    if (!(ev.key in map)) return;
+    const btn = el("ranges").querySelector(`button[data-hours="${map[ev.key]}"]`);
+    if (btn) btn.click();
+  });
+
+  setInterval(() => {
+    el("clock").textContent = new Date().toLocaleTimeString([], {
+      hour: "2-digit", minute: "2-digit", second: "2-digit"
+    });
+  }, 1000);
+
+  // status first: the chart needs the marginal threshold before its first draw
+  (async function boot() {
+    await loadStatus();
+    loadHistory();
+    loadEvents();
+    (function statusLoop() {
+      setTimeout(() => loadStatus().finally(statusLoop), pollMs);
+    })();
+    setInterval(loadHistory, 60000);
+    setInterval(loadEvents, 60000);
+  })();
+})();
+</script>
+</body>
+</html>

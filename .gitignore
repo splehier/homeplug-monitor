@@ -1,0 +1,21 @@
+# Real configuration — holds MQTT credentials. Never commit this.
+plc-monitor.env
+
+# Private deployment notes: hostnames, paths, site specifics.
+READMESTEVEN.md
+
+# Runtime data
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# Release archives and the pre-1.1 snapshot
+*.zip
+v10-backup/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/

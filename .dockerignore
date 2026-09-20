@@ -1,0 +1,10 @@
+v10-backup/
+data/
+__pycache__/
+*.pyc
+plc-monitor.env
+plc-history.db*
+*.zip
+READMESTEVEN.md
+LICENSE
+.gitignore
