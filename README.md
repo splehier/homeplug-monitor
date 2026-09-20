@@ -309,9 +309,7 @@ btop's built-in Default theme.
 
 No btop source code is used here. btop is C++; this page is hand-written HTML,
 CSS and SVG. But the look is unmistakably its work, and the palette values were
-read from btop's `btop_theme.cpp`, so the credit is owed and gladly given. If
-you like how this looks, go and use btop — it is a far better piece of software
-than this one.
+read from btop's `btop_theme.cpp`, so the credit is owed and gladly given.
 
 **[open-plc-utils](https://github.com/qca/open-plc-utils)** by Qualcomm Atheros
 — BSD-style three-clause licence. `plctool` is compiled from upstream sources
