@@ -297,9 +297,32 @@ so nothing else is needed at runtime. Pin a commit for reproducible builds:
 docker compose build --build-arg OPEN_PLC_UTILS_REF=<ref>
 ```
 
+## Acknowledgements
+
+**[btop++](https://github.com/aristocratos/btop)** by Aristocratos — Apache
+License 2.0.
+
+The status page is a deliberate homage to btop's visual design: framed panels
+with the title notched into the top border, panels distinguished by frame
+colour, the mirrored dual graph, the block meters, and the colour values of
+btop's built-in Default theme.
+
+No btop source code is used here. btop is C++; this page is hand-written HTML,
+CSS and SVG. But the look is unmistakably its work, and the palette values were
+read from btop's `btop_theme.cpp`, so the credit is owed and gladly given. If
+you like how this looks, go and use btop — it is a far better piece of software
+than this one.
+
+**[open-plc-utils](https://github.com/qca/open-plc-utils)** by Qualcomm Atheros
+— BSD-style three-clause licence. `plctool` is compiled from upstream sources
+during the image build and is not vendored in this repository.
+
 ## Licence
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE), which also carries the third-party notices for
+btop++ and open-plc-utils.
 
-`plctool` is built from [qca/open-plc-utils](https://github.com/qca/open-plc-utils)
-at image build time and is not vendored here; it carries its own BSD licence.
+Note that a Docker image built from this repository *contains* `plctool`, and
+its BSD licence requires binary redistributions to reproduce Qualcomm's
+copyright notice and licence conditions. That applies to you if you publish the
+built image, not if you merely build and run it yourself.

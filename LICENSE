@@ -19,3 +19,30 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+--------------------------------------------------------------------------
+THIRD-PARTY NOTICES
+--------------------------------------------------------------------------
+
+This project's own source is MIT licensed, as above. It also draws on the
+following works.
+
+btop++ — https://github.com/aristocratos/btop
+Copyright 2021 Aristocratos
+Licensed under the Apache License, Version 2.0
+http://www.apache.org/licenses/LICENSE-2.0
+
+    The status page (index.html) reproduces btop's visual design and the
+    colour values of its built-in Default theme. No btop source code is
+    included in this repository; the page is an independent implementation
+    in HTML, CSS and SVG.
+
+open-plc-utils — https://github.com/qca/open-plc-utils
+Copyright (c) 2013 Qualcomm Atheros, Inc.
+BSD-style three-clause licence.
+
+    plctool is compiled from upstream sources during the Docker image build
+    and is not distributed in this repository. A binary image built from the
+    Dockerfile does contain plctool, and anyone redistributing such an image
+    must reproduce the above copyright notice, the list of conditions and
+    the disclaimer from the open-plc-utils sources.

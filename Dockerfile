@@ -1,4 +1,7 @@
 # Stage 1: compile plctool from open-plc-utils.
+# open-plc-utils is Copyright (c) 2013 Qualcomm Atheros, Inc., under a
+# BSD-style three-clause licence. It is fetched and built here, not vendored;
+# images built from this file contain plctool and carry its licence terms.
 # Only plctool is built — the full suite takes far longer and nothing else is used.
 FROM debian:bookworm-slim AS build
 
